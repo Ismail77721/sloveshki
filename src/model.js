@@ -10,14 +10,15 @@ const Rules = (() => {
     return items;
   }
   function fresh(){
-    return {version:1,teams:shuffle([...names]).slice(0,2),seconds:30,goal:30,deduct:false,set:0,
+    return {version:1,dictionary:2,teams:shuffle([...names]).slice(0,2),seconds:30,goal:30,deduct:false,set:0,
       scores:[],turn:0,round:1,phase:'order',history:[],remaining:0,order:[],cursor:0};
   }
   function start(s){
     s.scores=s.teams.map(()=>0);
     s.order=shuffle(WORDS[s.set].map((_,i)=>i));
   }
-  function current(s){return WORDS[s.set][s.order[s.cursor]];}
+  function word(s,index){return (s.dictionary!==2 && PREVIOUS_WORDS[s.set][index]) || WORDS[s.set][index];}
+  function current(s){return word(s,s.order[s.cursor]);}
   function advance(s){
     const last=s.order[s.cursor++];
     if(s.cursor===s.order.length){
@@ -55,5 +56,5 @@ const Rules = (() => {
       s.order.every(i=>Number.isInteger(i)&&i>=0&&i<n)&&Number.isInteger(s.cursor)&&s.cursor>=0&&s.cursor<n&&
       Array.isArray(s.history)&&s.history.every(r=>r&&Number.isInteger(r.word)&&r.word>=0&&r.word<n&&typeof r.ok==='boolean');
   }
-  return {names,sets,shuffle,fresh,start,current,answer,points,confirm,valid};
+  return {names,sets,shuffle,fresh,start,current,word,answer,points,confirm,valid};
 })();

@@ -10,32 +10,36 @@
   }
   function save(){memory=JSON.stringify(s);write(saveKey,memory);}
   function clearSave(){memory=null;write(saveKey,null);}
-  let sound=get(soundKey)!=='off',ctx=null;
-  const effects=['01-button','02-guessed','03-skipped','04-time-up'];
+  let sound=get(soundKey)!=='off',ctx=null,gain=null;
+  const volumeKey='sloveshki.volume';
+  let volume=Math.min(100,Math.max(0,Number(get(volumeKey)??100)));
+  if(!Number.isFinite(volume))volume=100;
+  function applyVolume(){if(gain)gain.gain.value=sound?volume/100:0;players.forEach(a=>{a.volume=volume/100;a.muted=!sound||volume===0;});}
+  const effects=['01-button','02-guessed','03-skipped-v2','04-time-up'];
   const players=effects.map(n=>{const a=new Audio('./assets/'+n+'.wav');a.preload='auto';return a;});
   const buffers=[],sources=[];
+  applyVolume();
   function unlock(){
     if(!sound)return;
     try{
       const AC=window.AudioContext||window.webkitAudioContext;
       if(!ctx&&AC){
-        ctx=new AC();
+        ctx=new AC();gain=ctx.createGain();gain.connect(ctx.destination);applyVolume();
         effects.forEach((v,i)=>fetch('./assets/'+v+'.wav').then(r=>r.arrayBuffer()).then(b=>ctx.decodeAudioData(b,buffer=>{buffers[i]=buffer;})).catch(()=>{}));
       }
       if(ctx&&ctx.state==='suspended')ctx.resume().catch(()=>{});
     }catch{}
   }
   function fx(i){
-    if(!sound)return;unlock();
+    if(!sound||volume===0)return;unlock();
     if(buffers[i]&&ctx.state==='running'){
       if(sources[i]){try{sources[i].stop();}catch{}}
-      const src=ctx.createBufferSource();src.buffer=buffers[i];src.connect(ctx.destination);src.start();sources[i]=src;
+      const src=ctx.createBufferSource();src.buffer=buffers[i];src.connect(gain);src.start();sources[i]=src;
     }else{const a=players[i];a.currentTime=0;a.play().catch(()=>{});}
   }
   const svg=(path)=>'<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+path+'</svg>';
   const arrow=svg('<path d="M19 12H5m6-6-6 6 6 6"/>');
   const refresh=svg('<path d="M20 8a8 8 0 0 0-14-2L3 9m0-5v5h5m-4 7a8 8 0 0 0 14 2l3-3m0 5v-5h-5"/>');
-  function speaker(){return svg('<path d="M3 9h4l5-4v14l-5-4H3z"/>'+(sound?'<path d="M16 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>':'<path d="m3 3 18 18"/>'));}
   const star=on=>'<svg viewBox="0 0 32 32" aria-hidden="true"><path d="m16 2 4 9 10 1-7.5 7 2 10-8.5-5-8.5 5 2-10-7.5-7 10-1z" fill="'+(on?'#ebbf59':'none')+'" stroke="'+(on?'#957330':'#868778')+'" stroke-width="1.5"/></svg>';
   const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const button=(act,txt,cl='primary',attr='')=>'<button type="button" class="'+cl+'" data-act="'+act+'" '+attr+'>'+txt+'</button>';
@@ -48,7 +52,13 @@
   const view={
     home(){
       const old=load();
-      return button('sound',speaker(),'sound','aria-label="'+(sound?'Выключить':'Включить')+' звук" aria-pressed="'+sound+'"')+'<div class="brand" role="img" aria-label="Словешки"></div>'+button('new','Новая игра')+(old?button('continue','Продолжить','outline'):'')+button('rules','Как играть','plain');
+      return '<div class="brand" role="img" aria-label="Словешки"></div>'+button('new','Новая игра')+(old?button('continue','Продолжить','outline'):'')+button('prefs','Настройки','plain')+button('rules','Как играть','plain');
+    },
+    prefs(){
+      const full=inTelegram && tg.isVersionAtLeast('8.0')?tg.isFullscreen:!!document.fullscreenElement;
+      return back()+h('Настройки')+'<section class="pref-group"><h2>Экран</h2>'+button('fullscreen',full?'Выйти из полного экрана':'На весь экран')+'<p class="muted" role="status" id="full-status"></p></section>'+
+        '<section class="pref-group"><h2>Звук</h2><div class="box"><label class="switch"><b>Звук в игре</b><span>'+(sound?'Вкл.':'Выкл.')+'<input id="audio-enabled" type="checkbox" '+(sound?'checked':'')+'></span></label>'+
+        '<div class="setting"><label for="volume"><b>Громкость</b><output id="volume-value">'+volume+' %</output></label><input id="volume" type="range" min="0" max="100" value="'+volume+'" '+(sound?'':'disabled')+'></div></div></section>';
     },
     rules(){return back()+h('Как играть')+'<div class="ruleblock"><h2>Объясняй своей команде</h2><p>Один игрок видит слово. Можно описывать предмет, приводить примеры, использовать синонимы и жесты. Само слово и однокоренные слова называть нельзя.</p><h2>Отмечай ответы</h2><p>Смахни пуговицу вверх, если команда отгадала слово, или вниз, чтобы пропустить. За отгаданное слово — одно очко. По умолчанию пропуск даёт ноль.</p><h2>Последнее слово</h2><p>В 00:00 текущее слово остаётся вашей команде до свайпа. Затем проверь ответы: нажми на звезду, чтобы исправить отметку.</p><h2>Кто победил</h2><p>Когда команда достигает цели, остальные доигрывают круг. Побеждает команда с большим счётом. При равном максимальном счёте — ничья.</p></div>'+fill+button('home','В главное меню');},
     teams(){return back()+h('Команды')+'<div class="stack">'+s.teams.map((v,i)=>'<div class="team"><input data-name="'+i+'" value="'+esc(v)+'" maxlength="28" aria-label="Название команды '+(i+1)+'">'+button('shuffle',refresh,'circle','data-i="'+i+'" aria-label="Сменить название"')+(s.teams.length>2?button('remove','×','circle minor','data-i="'+i+'" aria-label="Убрать команду"'):'')+'</div>').join('')+'</div>'+(s.teams.length<Rules.names.length?button('add','+ Добавить команду','plus'):'')+'<p class="error" role="status"></p>'+fill+button('settings','Далее');},
@@ -60,7 +70,7 @@
     pause(){return h('Пауза')+button('unpause','Продолжить')+button('exit','Выход','outline');},
     review(){
       const n=Rules.points(s);
-      return '<p class="muted">'+team()+' · Раунд '+s.round+'</p>'+h('Конец раунда')+'<p class="muted">Нажми на звезду, чтобы исправить ответ.</p><div class="stack">'+s.history.map((r,i)=>'<div class="review-row"><b>'+esc(WORDS[s.set][r.word])+'</b>'+button('star',star(r.ok),'star','data-i="'+i+'" aria-label="'+esc(WORDS[s.set][r.word])+': '+(r.ok?'отгадано':'пропущено')+'" aria-pressed="'+r.ok+'"')+'</div>').join('')+'</div><div class="result">За ход<b>'+(n>0?'+':'')+n+'</b></div>'+fill+button('confirm','Далее');},
+      return '<p class="muted">'+team()+' · Раунд '+s.round+'</p>'+h('Конец раунда')+'<p class="muted">Нажми на звезду, чтобы исправить ответ.</p><div class="stack">'+s.history.map((r,i)=>'<div class="review-row"><b>'+esc(Rules.word(s,r.word))+'</b>'+button('star',star(r.ok),'star','data-i="'+i+'" aria-label="'+esc(Rules.word(s,r.word))+': '+(r.ok?'отгадано':'пропущено')+'" aria-pressed="'+r.ok+'"')+'</div>').join('')+'</div><div class="result">За ход<b>'+(n>0?'+':'')+n+'</b></div>'+fill+button('confirm','Далее');},
     finish(){const max=Math.max(...s.scores),w=s.teams.filter((_,i)=>s.scores[i]===max);return h('Итоги игры')+fill+'<div class="center"><p>'+ (w.length===1?'Победа!':'Ничья')+'</p><b class="big">'+w.map(esc).join(' · ')+'</b></div>'+rows()+fill+button('new','Сыграть ещё')+button('home','В меню','plain');}
   };
   function playView(ready){
@@ -95,9 +105,41 @@
     game.dataset.theme=board?'play':['settings','pause','finish'].includes(screen)?'sage':'linen';
     ui.innerHTML='<section class="screen '+(board?'play':screen==='pause'?'pause-screen':screen==='home'?'home':'')+'">'+view[screen]()+'</section>';
     ui.firstChild.scrollTop=oldScroll;
+    if(board)fitWord();
     if(board)Board.attach(ui.querySelector('.disc-slot'),screen==='ready'?'start':'word');
     if(screen==='play'&&s.remaining>0)timer=setInterval(tick,100);
     if(inTelegram&&tg.isVersionAtLeast('6.1'))screen==='home'?tg.BackButton.hide():tg.BackButton.show();
+  }
+  const measure=document.createElement('canvas').getContext('2d');
+  function fitWord(){
+    const el=ui.querySelector('.disc');
+    if(!el || screen!=='play')return;
+    const parts=Rules.current(s).split(' '),limit=el.clientWidth*.76;
+    let size=24,lines;
+    for(;size>=10;size--){
+      measure.font='700 '+size+'px Open';
+      const candidates=[parts.join(' '),...parts.slice(1).map((_,i)=>parts.slice(0,i+1).join(' ')+'\n'+parts.slice(i+1).join(' '))];
+      const width=t=>Math.max(...t.split('\n').map(line=>measure.measureText(line).width));
+      lines=candidates[0];
+      if(width(lines)>limit)lines=candidates.reduce((a,b)=>width(a)<=width(b)?a:b);
+      if(width(lines)<=limit)break;
+    }
+    el.style.fontSize=size+'px';el.textContent=lines;
+  }
+  window.addEventListener('resize',fitWord);
+  if(window.ResizeObserver)new ResizeObserver(fitWord).observe(game);
+  document.fonts?.ready.then(fitWord);
+  function refreshFull(){setSafe();if(screen==='prefs')render('prefs');}
+  function fullMessage(){const el=document.querySelector('#full-status');if(el)el.textContent='Полный экран недоступен в этом приложении.';}
+  document.addEventListener('fullscreenchange',refreshFull);
+  if(inTelegram){tg.onEvent('fullscreenChanged',refreshFull);tg.onEvent('fullscreenFailed',fullMessage);}
+  async function toggleFull(){
+    try{
+      if(inTelegram && tg.isVersionAtLeast('8.0')){if(tg.isFullscreen)tg.exitFullscreen();else tg.requestFullscreen();}
+      else if(document.fullscreenElement)await document.exitFullscreen();
+      else if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();
+      else fullMessage();
+    }catch{fullMessage();}
   }
   function phase(next){s.phase=next;save();render(next);}
   function goBack(){
@@ -106,7 +148,7 @@
       case 'play':pause();break;
       case 'pause':unpause();break;
       case 'ready':phase('order');break;
-      case 'review':case 'order':case 'finish':case 'teams':case 'rules':render('home');break;
+      case 'review':case 'order':case 'finish':case 'teams':case 'prefs':case 'rules':render('home');break;
       case 'sets':render('settings');break;
       case 'settings':render('teams');break;
       case 'replace':render('sets');break;
@@ -124,18 +166,39 @@
   }
   function pause(){if(screen!=='play')return;tick();phase('pause');}
   function unpause(){deadline=performance.now()+s.remaining;phase('play');}
-  function setOffset(d){const el=ui.querySelector('.disc');if(el)el.style.transform='translateY('+d+'px)';Board.move(d);}
+  function pose(y,angle=0,scale=1,opacity=1){
+    const el=ui.querySelector('.disc');if(!el)return;
+    el.style.transform='translateY('+y+'px) rotate('+angle+'deg) scale('+scale+')';
+    el.style.opacity=opacity;Board.move(y,angle,scale,opacity);
+  }
+  function setOffset(y){pose(y,y*.06);}
   function answer(ok){
     if(screen!=='play'||motion)return;
-    tick();const last=s.remaining===0,offset=drag?.offset||0;drag=null;
-    Rules.answer(s,ok);save();fx(ok?1:2);
-    const t0=performance.now();const dur=window.matchMedia('(prefers-reduced-motion: reduce)').matches?1:135;
-    const animate=now=>{
-      const t=Math.min(1,(now-t0)/dur);setOffset(offset+((ok?-105:105)-offset)*t);
-      if(t<1){motion=requestAnimationFrame(animate);return;}
+    tick();
+    const last=s.remaining===0,offset=drag?.offset||0;
+    const target=ok?'.upper strong':'.lower strong';
+    const counter=ui.querySelector(target).getBoundingClientRect();
+    const slot=ui.querySelector('.disc-slot').getBoundingClientRect();
+    const destination=counter.top+counter.height/2-slot.top-slot.height/2;
+    drag=null;Rules.answer(s,ok);save();fx(ok?1:2);
+    const duration=matchMedia('(prefers-reduced-motion: reduce)').matches?1:250;
+    const start=performance.now();
+    function fly(now){
+      const t=Math.min(1,(now-start)/duration);
+      pose(offset+(destination-offset)*t,Math.sign(destination)*12*t,1-.72*t,1-t*t);
+      if(t<1){motion=requestAnimationFrame(fly);return;}
       motion=null;render(last?'review':'play');
-    };
-    motion=requestAnimationFrame(animate);
+      if(last||duration===1)return;
+      ui.querySelector(target).classList.add('pulse');
+      const arrival=performance.now();
+      function enter(time){
+        const t=Math.min(1,(time-arrival)/150);
+        pose(-Math.sign(destination)*8*(1-t),0,.91+.09*t+.025*Math.sin(Math.PI*t),.55+.45*t);
+        motion=t<1?requestAnimationFrame(enter):null;
+      }
+      enter(arrival);
+    }
+    motion=requestAnimationFrame(fly);
   }
   function suspend(){
     if(screen!=='play')return;
@@ -151,14 +214,18 @@
     const t=e.target;
     if(t.hasAttribute('data-name'))s.teams[Number(t.dataset.name)]=t.value;
     if(t.id==='seconds'||t.id==='goal'){s[t.id]=Number(t.value);ui.querySelector('#val-'+t.id).textContent=t.value+(t.id==='seconds'?' с':' очков');}
+    if(t.id==='volume'){volume=Number(t.value);write(volumeKey,String(volume));applyVolume();ui.querySelector('#volume-value').textContent=volume+' %';}
+    if(t.id==='audio-enabled'){sound=t.checked;write(soundKey,sound?'on':'off');applyVolume();render('prefs');if(sound)fx(0);}
     if(t.id==='deduct')s.deduct=t.checked;
   });
+  ui.addEventListener('change',e=>{if(e.target.id==='volume')fx(0);});
   ui.addEventListener('click',e=>{
     const b=e.target.closest('button');if(!b||!ui.contains(b))return;
     const act=b.dataset.act,i=Number(b.dataset.i);
-    if(act==='sound'){sound=!sound;write(soundKey,sound?'on':'off');if(sound)fx(0);else{players.forEach(a=>a.pause());sources.forEach(src=>{try{src.stop();}catch{}});}render('home');return;}
     if(act==='disc')return;if(motion&&screen==='play')return;fx(0);
     switch(act){
+      case 'fullscreen':toggleFull();break;
+      case 'prefs':render('prefs');break;
       case 'back':goBack();break;
       case 'home':case 'rules':case 'sets':render(act);break;
       case 'new':s=Rules.fresh();render('teams');break;
