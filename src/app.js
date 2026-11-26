@@ -77,8 +77,8 @@
     const guessed=ready?0:s.history.filter(r=>r.ok).length,missed=ready?0:s.history.length-guessed;
     const word=ready?'Начать':Rules.current(s);
     return '<div class="topbar"><span class="team-name">'+team()+'</span>'+(ready?'':button('pause','Пауза','mini'))+'</div><div class="counter upper"><strong>'+guessed+'</strong><span>Отгадано</span></div>'+
-      (!ready&&s.remaining===0?'<b class="last">Последнее слово</b>':'')+'<div class="disc-slot">'+button(ready?'begin':'disc',esc(word),'disc'+(ready?' start':'')+(word.length>13?' long':''),ready?'':'aria-label="'+esc(word)+'. Свайп вверх или вниз"')+'</div>'+
-      '<div class="counter lower"><span>Пропущено</span><strong>'+missed+'</strong></div><div class="timer">'+clock(ready?s.seconds*1000:s.remaining)+'</div>';
+      '<div class="disc-slot">'+button(ready?'begin':'disc',esc(word),'disc'+(ready?' start':'')+(word.length>13?' long':''),ready?'':'aria-label="'+esc(word)+'. Свайп вверх или вниз"')+'</div>'+
+      '<div class="counter lower"><span>Пропущено</span><strong>'+missed+'</strong></div><div class="timer"><span class="last"'+(!ready&&s.remaining===0?'':' hidden')+'>Последнее слово</span><span class="time-value">'+clock(ready?s.seconds*1000:s.remaining)+'</span></div>';
   }
   const tg=window.Telegram&&window.Telegram.WebApp;
   const inTelegram=Boolean(tg&&(tg.platform!=='unknown'||tg.initData||/tgWebAppPlatform/.test(location.hash)));
@@ -160,9 +160,9 @@
     s.remaining=Math.max(0,deadline-performance.now());
     if(!s.remaining){
       fx(3);save();clearInterval(timer);
-      const label=document.createElement('b');label.className='last';label.textContent='Последнее слово';ui.firstChild.appendChild(label);
+      ui.querySelector('.last').hidden=false;
     }
-    const el=ui.querySelector('.timer');if(el)el.textContent=clock(s.remaining);
+    const el=ui.querySelector('.time-value');if(el)el.textContent=clock(s.remaining);
   }
   function pause(){if(screen!=='play')return;tick();phase('pause');}
   function unpause(){deadline=performance.now()+s.remaining;phase('play');}

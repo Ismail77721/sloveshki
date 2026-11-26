@@ -1,27 +1,37 @@
 'use strict';
 // Phaser draws the physical button. Native text and touch controls remain accessible above it.
 const Board = (() => {
-  let disc, frame, type='word', shift=0,angle=0,scale=1,opacity=1;
+  let engine, disc, frame, type='word', shift=0,angle=0,scale=1,opacity=1;
   const host=document.querySelector('#surface');
   function layout(){
-    if(!disc||!frame)return;
-    const h=host.getBoundingClientRect(),w=frame.getBoundingClientRect();
-    disc.setTexture(type).setDisplaySize(w.width*scale,w.height*scale).setAngle(angle).setAlpha(opacity).setPosition(w.left-h.left+w.width/2,w.top-h.top+w.height/2+shift);
+    if(!engine || !disc)return;
+    const h=host.getBoundingClientRect();
+    const density=Math.min(window.devicePixelRatio||1,4);
+    const width=Math.max(1,Math.round(h.width*density));
+    const height=Math.max(1,Math.round(h.height*density));
+    if(engine.canvas.width!==width || engine.canvas.height!==height){
+      engine.scale.resize(width,height);
+    }
+    if(!frame)return;
+    const w=frame.getBoundingClientRect(),rx=width/h.width,ry=height/h.height;
+    disc.setTexture(type).setDisplaySize(w.width*scale*rx,w.height*scale*ry)
+      .setAngle(angle).setAlpha(opacity)
+      .setPosition((w.left-h.left+w.width/2)*rx,(w.top-h.top+w.height/2+shift)*ry);
   }
   function fallback(){
     host.classList.remove('visible');document.body.classList.remove('phaser-ready');
   }
   if(window.Phaser){
     class Buttons extends Phaser.Scene {
-      preload(){for(const name of ['word','start'])this.load.image(name,'./assets/'+name+'2.webp');}
+      preload(){for(const name of ['word','start'])this.load.image(name,'./assets/'+name+'3.webp');}
       create(){
         if(!this.textures.exists('word')||!this.textures.exists('start'))return;
         disc=this.add.image(0,0,'word');document.body.classList.add('phaser-ready');
         if(frame){host.classList.add('visible');layout();}else disc.setVisible(false);
       }
     }
-    try{new Phaser.Game({type:Phaser.CANVAS,parent:host,transparent:true,banner:false,audio:{noAudio:true},
-      input:{keyboard:false,mouse:false,touch:false},scale:{mode:Phaser.Scale.RESIZE,width:host.clientWidth||390,height:host.clientHeight||740},
+    try{engine=new Phaser.Game({type:Phaser.CANVAS,parent:host,transparent:true,banner:false,audio:{noAudio:true},
+      input:{keyboard:false,mouse:false,touch:false},scale:{mode:Phaser.Scale.NONE,width:host.clientWidth||390,height:host.clientHeight||740},
       fps:{target:30},scene:Buttons});}catch(e){fallback();}
   }
   const obs=window.ResizeObserver?new ResizeObserver(layout):null;
